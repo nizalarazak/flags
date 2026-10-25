@@ -3,6 +3,9 @@
 
 #include <any>
 #include <iostream>
+#include <ostream>
+#include <stdexcept>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -14,7 +17,7 @@ struct arg {
     std::string argName;
     std::string argInfo;
     std::string alias;
-    std::any reference;
+    std::variant<std::string *, int *, float *, bool *> reference;
     bool required;
 };
 
@@ -33,12 +36,14 @@ void printHelp(bool usageOnly = false) {
         }
 
         auto getType = [](int i) {
-            if ((*args)[i].reference.type() == typeid(std::string *)) {
+            if ((*args)[i].reference.index() == 0) {
                 return "<string>";
-            } else if ((*args)[i].reference.type() == typeid(int *)) {
+            } else if ((*args)[i].reference.index() == 1) {
                 return "<integer>";
-            } else if ((*args)[i].reference.type() == typeid(float *)) {
+            } else if ((*args)[i].reference.index() == 2) {
                 return "<float>";
+            } else if ((*args)[i].reference.index() == 3) {
+                return "<bool>";
             }
             return "unknown type";
         };
@@ -63,7 +68,8 @@ void init(std::string name, std::string info) {
     *appInfo = info;
 }
 
-void flag(std::string name, std::string info, std::any var,
+void flag(std::string name, std::string info,
+          std::variant<std::string *, int *, float *, bool *> var,
           bool required = false, std::string alias = "") {
     arg newArg;
     newArg.argName = name;
@@ -85,21 +91,42 @@ void parse(int argc, char **argv) {
         for (int j = 0; j <= (*args).size(); j++) {
             if (currentArg == (*args)[j].argName ||
                 currentArg == (*args)[j].alias) {
+
+                auto var = (*args)[j].reference;
+
+                if (var.index() == 3) {
+                    bool *reference = std::get<bool *>(var);
+                    *reference = true;
+                    break;
+                }
+
                 if (i == argc - 1) {
                     std::cout << "Error: Value not specified for parameter "
                               << currentArg << std::endl;
                     exit(1);
                 }
-                auto var = (*args)[j].reference;
-                if (var.type() == typeid(std::string *)) {
-                    std::string *reference = std::any_cast<std::string *>(var);
+
+                if (var.index() == 0) {
+                    std::string *reference = std::get<std::string *>(var);
                     *reference = std::string_view(argv[i + 1]);
-                } else if (var.type() == typeid(int *)) {
-                    int *reference = std::any_cast<int *>(var);
-                    *reference = std::stoi(argv[i + 1]);
-                } else if (var.type() == typeid(float *)) {
-                    float *reference = std::any_cast<float *>(var);
-                    *reference = std::stof(argv[i + 1]);
+                } else if (var.index() == 1) {
+                    int *reference = std::get<int *>(var);
+                    try {
+                        *reference = std::stoi(argv[i + 1]);
+                    } catch (std::invalid_argument) {
+                        std::cout << "Error: " << currentArg
+                                  << " takes an integer parameter" << std::endl;
+                        exit(1);
+                    }
+                } else if (var.index() == 2) {
+                    float *reference = std::get<float *>(var);
+                    try {
+                        *reference = std::stof(argv[i + 1]);
+                    } catch (std::invalid_argument) {
+                        std::cout << "Error: " << currentArg
+                                  << " takes a float parameter" << std::endl;
+                        exit(1);
+                    }
                 }
                 i++;
                 break;
