@@ -3,23 +3,22 @@
 
 int main(int argc, char **argv) {
 
-    flags::init("Greeting app v0.1",
+    flags::init("greet", "Greeting app v1.2",
                 "Introduce yourself and I will greet you!");
 
     std::string name = "default_name";
-    flags::flag("--name", "This is where you give your name", &name, true,
-                "-n");
+    flags::add("--name", "This is where you give your name", &name, true);
 
-    std::string work = "default_work";
-    flags::flag("--work", "This is where you enter what you do", &work);
+    std::string work = "default_job";
+    flags::add("--work", "This is where you enter what you do", &work);
 
     int age{};
-    flags::flag("--age", "This is where you give your age", &age);
+    flags::add("--age", "This is where you give your age", &age);
 
     bool willingToWork = false;
-    flags::flag("--willingToWork",
-                "Entering this will flag you as willing to work",
-                &willingToWork, false, "-W");
+    flags::add("--willingToWork",
+               "Entering this will flag you as willing to work", &willingToWork,
+               false, "-W");
 
     flags::parse(argc, argv);
 

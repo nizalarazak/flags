@@ -1,24 +1,22 @@
 #ifndef FLAGS_H
 #define FLAGS_H
 
-#include <any>
 #include <iostream>
-#include <ostream>
-#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 namespace {
 
+std::string *appCommand = new std::string{};
 std::string *appName = new std::string{};
 std::string *appInfo = new std::string{};
 
 struct arg {
-    std::string argName;
-    std::string argInfo;
-    std::string alias;
-    std::variant<std::string *, int *, float *, bool *> reference;
-    bool required;
+    std::string argName, argInfo, alias;
+    std::variant<std::string *, int *, double *, bool *> reference;
+    bool required, updated;
 };
 
 std::vector<arg> *args = new std::vector<arg>;
@@ -28,12 +26,9 @@ void printHelp(bool usageOnly = false) {
         std::cout << *appName << "\n" << *appInfo << std::endl;
 
     if (!args->empty()) {
-        std::cout << "\nUsage: " << std::endl;
-        int longestCharCount = 0;
-        for (auto flag : *args) {
-            if (flag.argName.size() > longestCharCount)
-                longestCharCount = flag.argName.size() + 1;
-        }
+        std::cout << "\nUsage: \n    " << *appCommand
+                  << " [option] [argument]\n    " << *appCommand << " [flag]"
+                  << std::endl;
 
         auto getType = [](int i) {
             if ((*args)[i].reference.index() == 0) {
@@ -41,21 +36,64 @@ void printHelp(bool usageOnly = false) {
             } else if ((*args)[i].reference.index() == 1) {
                 return "<integer>";
             } else if ((*args)[i].reference.index() == 2) {
-                return "<float>";
+                return "<double>";
             } else if ((*args)[i].reference.index() == 3) {
                 return "<bool>";
             }
             return "unknown type";
         };
 
+        int longestCharCount = 0;
+        std::string_view type;
         for (int i = 0; i < args->size(); i++) {
-            std::string padding(longestCharCount - (*args)[i].argName.size(),
-                                ' ');
-            std::cout << "\t" << (*args)[i].argName << padding << ": "
-                      << (*args)[i].argInfo << " " << getType(i) << "\n";
+            type = getType(i);
+            if (type == "<bool>" &&
+                (*args)[i].argName.size() > longestCharCount) {
+                longestCharCount = (*args)[i].argName.size();
+            } else if ((*args)[i].argName.size() + type.size() >
+                       longestCharCount)
+                longestCharCount = (*args)[i].argName.size() + type.size();
+        }
+
+        std::cout << "\nOptions:" << std::endl;
+
+        for (int i = 0; i < args->size(); i++) {
+            type = getType(i);
+            if (type != "<bool>") {
+                std::string padding(
+                    longestCharCount + 3 -
+                        ((*args)[i].argName.size() + type.size()),
+                    ' ');
+                std::cout << "    " << (*args)[i].argName << " " << type
+                          << padding << " " << (*args)[i].argInfo
+                          << ((*args)[i].required ? " (required)" : "") << "\n";
+            }
+        }
+
+        std::cout << "\nFlags:" << std::endl;
+
+        for (int i = 0; i < args->size(); i++) {
+            type = getType(i);
+            if (type == "<bool>") {
+                std::string padding(
+                    longestCharCount + 3 - (*args)[i].argName.size(), ' ');
+                std::cout << "    " << (*args)[i].argName << padding << "  "
+                          << (*args)[i].argInfo
+                          << ((*args)[i].required ? " (required)" : "") << "\n";
+            }
         }
 
         std::cout << std::endl;
+    }
+}
+
+void checkForRequired() {
+    for (const auto &arg : *args) {
+        if (arg.required == true && arg.updated == false) {
+            std::cout << "Error: missing required parameter " << arg.argName
+                      << std::endl;
+            exit(1);
+        }
     }
 }
 
@@ -63,29 +101,37 @@ void printHelp(bool usageOnly = false) {
 
 namespace flags {
 
-void init(std::string name, std::string info) {
+void init(std::string command, std::string name, std::string info) {
+    *appCommand = command;
     *appName = name;
     *appInfo = info;
 }
 
-void flag(std::string name, std::string info,
-          std::variant<std::string *, int *, float *, bool *> var,
-          bool required = false, std::string alias = "") {
+void add(std::string name, std::string info,
+         std::variant<std::string *, int *, double *, bool *> var,
+         bool required = false, std::string alias = "") {
     arg newArg;
     newArg.argName = name;
     newArg.argInfo = info;
     newArg.reference = var;
     newArg.required = required;
+    newArg.updated = false;
     alias.empty() ? newArg.alias = name.substr(1, 2) : newArg.alias = alias;
     (*args).push_back(newArg);
 }
 
 void parse(int argc, char **argv) {
+    if (argc == 1) {
+        std::cout
+            << "No parameter given. Please enter --help for more information"
+            << std::endl;
+        exit(1);
+    }
     for (int i = 1; i < argc; i++) {
         std::string_view currentArg = argv[i];
         if (currentArg == "--help" || currentArg == "-h") {
             printHelp();
-            continue;
+            exit(1);
         }
 
         for (int j = 0; j <= (*args).size(); j++) {
@@ -98,9 +144,7 @@ void parse(int argc, char **argv) {
                     bool *reference = std::get<bool *>(var);
                     *reference = true;
                     break;
-                }
-
-                if (i == argc - 1) {
+                } else if (i == argc - 1) {
                     std::cout << "Error: Value not specified for parameter "
                               << currentArg << std::endl;
                     exit(1);
@@ -119,15 +163,16 @@ void parse(int argc, char **argv) {
                         exit(1);
                     }
                 } else if (var.index() == 2) {
-                    float *reference = std::get<float *>(var);
+                    double *reference = std::get<double *>(var);
                     try {
-                        *reference = std::stof(argv[i + 1]);
+                        *reference = std::stod(argv[i + 1]);
                     } catch (std::invalid_argument) {
                         std::cout << "Error: " << currentArg
-                                  << " takes a float parameter" << std::endl;
+                                  << " takes a double parameter" << std::endl;
                         exit(1);
                     }
                 }
+                (*args)[j].updated = true;
                 i++;
                 break;
             } else if (j == (*args).size()) {
@@ -139,6 +184,9 @@ void parse(int argc, char **argv) {
         }
     }
 
+    checkForRequired();
+
+    delete appCommand;
     delete appName;
     delete appInfo;
 
