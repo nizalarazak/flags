@@ -2,16 +2,15 @@
 #define FLAGS_H
 
 #include <iostream>
-#include <string>
 #include <string_view>
 #include <variant>
 #include <vector>
 
 namespace {
 
-std::string *appCommand = new std::string{};
-std::string *appName = new std::string{};
-std::string *appInfo = new std::string{};
+inline std::string *appCommand = new std::string{};
+inline std::string *appName = new std::string{};
+inline std::string *appInfo = new std::string{};
 
 struct arg {
     std::string argName, argInfo, alias;
@@ -19,9 +18,11 @@ struct arg {
     bool required, updated;
 };
 
-std::vector<arg> *args = new std::vector<arg>;
+inline std::vector<arg> *args = new std::vector<arg>;
 
-void printHelp(bool usageOnly = false) {
+inline void printHelp(bool usageOnly = false) {
+    // usageOnly flag prints help without app info
+    // for when printing help in case of an error
     if (!(*appName).empty() && !usageOnly)
         std::cout << *appName << "\n" << *appInfo << std::endl;
 
@@ -30,56 +31,69 @@ void printHelp(bool usageOnly = false) {
                   << " [option] [argument]\n    " << *appCommand << " [flag]"
                   << std::endl;
 
-        auto getType = [](int i) {
-            if ((*args)[i].reference.index() == 0) {
+        auto getType = [](const arg &a) {
+            if (std::holds_alternative<std::string *>(a.reference)) {
                 return "<string>";
-            } else if ((*args)[i].reference.index() == 1) {
+            } else if (std::holds_alternative<int *>(a.reference)) {
                 return "<integer>";
-            } else if ((*args)[i].reference.index() == 2) {
+            } else if (std::holds_alternative<double *>(a.reference)) {
                 return "<double>";
-            } else if ((*args)[i].reference.index() == 3) {
+            } else if (std::holds_alternative<bool *>(a.reference)) {
                 return "<bool>";
             }
             return "unknown type";
         };
 
+        // dynamic sizing of spaces by looking for longest command
         int longestCharCount = 0;
         std::string_view type;
-        for (int i = 0; i < args->size(); i++) {
-            type = getType(i);
-            if (type == "<bool>" &&
-                (*args)[i].argName.size() > longestCharCount) {
-                longestCharCount = (*args)[i].argName.size();
-            } else if ((*args)[i].argName.size() + type.size() >
-                       longestCharCount)
-                longestCharCount = (*args)[i].argName.size() + type.size();
+        for (const arg &arg : *args) {
+            type = getType(arg);
+            if (type == "<bool>" && arg.argName.size() > longestCharCount) {
+                longestCharCount = arg.argName.size();
+            } else if (arg.argName.size() + type.size() > longestCharCount)
+                longestCharCount = arg.argName.size() + type.size();
         }
+
+        // same as above but for aliases
+        int longestAliasCount = 0;
+        auto it =
+            std::max_element(args->begin(), args->end(),
+                             [longestAliasCount](const arg &a, const arg &b) {
+                                 return a.alias.size() > b.alias.size();
+                             });
+        if (it != args->end())
+            longestAliasCount = it->alias.size();
 
         std::cout << "\nOptions:" << std::endl;
 
-        for (int i = 0; i < args->size(); i++) {
-            type = getType(i);
+        for (const arg &arg : *args) {
+            type = getType(arg);
             if (type != "<bool>") {
-                std::string padding(
-                    longestCharCount + 3 -
-                        ((*args)[i].argName.size() + type.size()),
-                    ' ');
-                std::cout << "    " << (*args)[i].argName << " " << type
-                          << padding << " " << (*args)[i].argInfo
-                          << ((*args)[i].required ? " (required)" : "") << "\n";
+                std::string aliasPadding(longestAliasCount - arg.alias.size(),
+                                         ' ');
+                std::string padding(longestCharCount + 5 -
+                                        (arg.argName.size() + type.size()),
+                                    ' ');
+                std::cout << "    " << arg.alias << ", " << aliasPadding
+                          << arg.argName << " " << type << padding << " "
+                          << arg.argInfo << (arg.required ? " (required)" : "")
+                          << "\n";
             }
         }
 
         std::cout << "\nFlags:" << std::endl;
 
-        for (int i = 0; i < args->size(); i++) {
-            type = getType(i);
+        for (const arg &arg : *args) {
+            type = getType(arg);
             if (type == "<bool>") {
-                std::string padding(
-                    longestCharCount + 3 - (*args)[i].argName.size(), ' ');
-                std::cout << "    " << (*args)[i].argName << padding << "  "
-                          << (*args)[i].argInfo
-                          << ((*args)[i].required ? " (required)" : "") << "\n";
+                std::string aliasPadding(longestAliasCount - arg.alias.size(),
+                                         ' ');
+                std::string padding(longestCharCount + 5 - arg.argName.size(),
+                                    ' ');
+                std::cout << "    " << arg.alias << ", " << aliasPadding
+                          << arg.argName << padding << "  " << arg.argInfo
+                          << (arg.required ? " (required)" : "") << "\n";
             }
         }
 
@@ -87,7 +101,7 @@ void printHelp(bool usageOnly = false) {
     }
 }
 
-void checkForRequired() {
+inline void checkForRequired() {
     for (const auto &arg : *args) {
         if (arg.required == true && arg.updated == false) {
             std::cout << "Error: missing required parameter " << arg.argName
@@ -101,26 +115,66 @@ void checkForRequired() {
 
 namespace flags {
 
-void init(std::string command, std::string name, std::string info) {
+/**
+ * @brief Initialized basic information about your application
+ *
+ * @param command The name of the binanry executable
+ * @param name The name of your applciation
+ * @param info Brief info about your applciation
+ *
+ * @note name and info will be print out when user asks for --help
+ */
+inline void init(std::string command, std::string name, std::string info) {
     *appCommand = command;
     *appName = name;
     *appInfo = info;
 }
 
-void add(std::string name, std::string info,
-         std::variant<std::string *, int *, double *, bool *> var,
-         bool required = false, std::string alias = "") {
+/**
+* @brief Add a new argument to parse
+*
+* @param name Name of the arguement
+* @param info Information about the argument
+* @param var A reference of the variable where the parsed argument is to be
+stored
+* @param required If this arguement must be provided by the user
+* @param alias A shorter name for the argument name
+*
+* @note required and alias are optional. alias will be autogenerated as -[first
+character of command name] unless specified
+ */
+inline void add(std::string name, std::string info,
+                std::variant<std::string *, int *, double *, bool *> var,
+                bool required = false, std::string alias = "") {
+
+    auto getAlias = [name]() {
+        auto it = std::find_if(name.begin(), name.end(),
+                               [](char c) { return c != '-'; });
+        std::string alias = "-";
+        if (it != name.end())
+            return alias + *it;
+        throw std::invalid_argument(
+            "Name of a given argument has no characters in it");
+        // check for collisions with previous alias
+    };
+
     arg newArg;
     newArg.argName = name;
     newArg.argInfo = info;
     newArg.reference = var;
     newArg.required = required;
     newArg.updated = false;
-    alias.empty() ? newArg.alias = name.substr(1, 2) : newArg.alias = alias;
+    alias.empty() ? newArg.alias = getAlias() : newArg.alias = alias;
     (*args).push_back(newArg);
 }
 
-void parse(int argc, char **argv) {
+/**
+ * @brief Load CLI args into added variables
+ *
+ * @params argc Argument count given to int main()
+ * @params argv Argument values given to int main()
+ */
+inline void parse(int argc, char **argv) {
     if (argc == 1) {
         std::cout
             << "No parameter given. Please enter --help for more information"
@@ -131,18 +185,20 @@ void parse(int argc, char **argv) {
         std::string_view currentArg = argv[i];
         if (currentArg == "--help" || currentArg == "-h") {
             printHelp();
-            exit(1);
+            exit(0);
         }
 
-        for (int j = 0; j <= (*args).size(); j++) {
+        for (int j = 0; j < (*args).size(); j++) {
             if (currentArg == (*args)[j].argName ||
                 currentArg == (*args)[j].alias) {
 
                 auto var = (*args)[j].reference;
 
-                if (var.index() == 3) {
+                // handling flags
+                if (std::holds_alternative<bool *>(var)) {
                     bool *reference = std::get<bool *>(var);
                     *reference = true;
+                    (*args)[j].updated = true;
                     break;
                 } else if (i == argc - 1) {
                     std::cout << "Error: Value not specified for parameter "
@@ -150,10 +206,11 @@ void parse(int argc, char **argv) {
                     exit(1);
                 }
 
-                if (var.index() == 0) {
+                // handling options
+                if (std::holds_alternative<std::string *>(var)) {
                     std::string *reference = std::get<std::string *>(var);
                     *reference = std::string_view(argv[i + 1]);
-                } else if (var.index() == 1) {
+                } else if (std::holds_alternative<int *>(var)) {
                     int *reference = std::get<int *>(var);
                     try {
                         *reference = std::stoi(argv[i + 1]);
@@ -162,7 +219,7 @@ void parse(int argc, char **argv) {
                                   << " takes an integer parameter" << std::endl;
                         exit(1);
                     }
-                } else if (var.index() == 2) {
+                } else if (std::holds_alternative<double *>(var)) {
                     double *reference = std::get<double *>(var);
                     try {
                         *reference = std::stod(argv[i + 1]);

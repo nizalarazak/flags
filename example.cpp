@@ -1,5 +1,7 @@
 #include "flags.hpp"
+#include <chrono>
 #include <iostream>
+#include <thread>
 
 int main(int argc, char **argv) {
 
@@ -7,10 +9,10 @@ int main(int argc, char **argv) {
                 "Introduce yourself and I will greet you!");
 
     std::string name = "default_name";
-    flags::add("--name", "This is where you give your name", &name, true);
+    flags::add("-name", "This is where you give your name", &name);
 
     std::string work = "default_job";
-    flags::add("--work", "This is where you enter what you do", &work);
+    flags::add("work", "This is where you enter what you do", &work);
 
     int age{};
     flags::add("--age", "This is where you give your age", &age);
@@ -22,11 +24,11 @@ int main(int argc, char **argv) {
 
     flags::parse(argc, argv);
 
-    std::cout << "hi " << name << ", you are " << age
-              << " years old and your occupation is " << work << std::endl;
+    // std::cout << "hi " << name << ", you are " << age
+    //           << " years old and your occupation is " << work << std::endl;
 
-    std::cout << "You are " << (willingToWork ? "" : "not ")
-              << "willing to work" << std::endl;
+    // std::cout << "You are " << (willingToWork ? "" : "not ")
+    //           << "willing to work" << std::endl;
 
     return 0;
 }
