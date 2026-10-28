@@ -116,8 +116,8 @@ inline void printHelp(bool usageOnly = false) {
 inline void checkForRequired() {
     for (const auto &arg : *args) {
         if (arg.required == true && arg.updated == false) {
-            std::cout << "Error: missing required parameter " << arg.argName
-                      << std::endl;
+            std::cout << "Error: missing required parameter '" << arg.argName
+                      << "'." << std::endl;
             exit(1);
         }
     }
@@ -143,11 +143,11 @@ inline void init(std::string command, std::string name, std::string info) {
 }
 
 /**
-* @brief Add a new argument to parse
+* @brief Register a new argument to parse
 *
 * @param name Name of the arguement
-* @param info A short description shown in help output
-* @param var A reference of the variable where the parsed value is to be
+* @param info A short description about it
+* @param var A pointer to the variable where the parsed value is to be
 stored
 * @param required If this arguement must be provided
 * @param alias A shorter name for the argument name
@@ -173,10 +173,10 @@ inline void add(std::string name, std::string info,
                 it++;
                 if (it == name.end()) {
                     throw std::runtime_error(
-                        "\nCannot generate an alias for " + name +
-                        " due to conflict with " + arg.argName +
-                        ". Please specify another alias for " + name + " or " +
-                        arg.argName + ".");
+                        "\nCannot generate an alias for '" + name +
+                        "' due to conflict with '" + arg.argName +
+                        "'. Please specify another alias for '" + name +
+                        "' or '" + arg.argName + "'.");
                     break;
                 }
                 alias += *it;
@@ -185,23 +185,22 @@ inline void add(std::string name, std::string info,
         return alias;
     };
 
-    auto it = std::find_if(args->begin(), args->end(),
-                           [name](const arg &a) { return a.argName == name; });
-    if (it != args->end())
-        throw std::invalid_argument("\nArg name " + name +
-                                    " is being added more than once");
+    for (const arg &arg : *args) {
+        if (arg.argName == name)
+            throw std::invalid_argument("\nArg name '" + name +
+                                        "' is being added more than once");
+        if (arg.alias == name)
+            throw std::invalid_argument(
+                "\n" + name + " is already an alias for " + arg.argName);
+        if (arg.alias == alias)
+            throw std::invalid_argument("\nAlias '" + alias +
+                                        "' is also used by " + arg.argName);
+    }
 
-    it = std::find_if(args->begin(), args->end(),
-                      [name](const arg &a) { return a.alias == name; });
-    if (it != args->end())
-        throw std::invalid_argument("\n" + name + " is already an alias for " +
-                                    it->argName);
-
-    it = std::find_if(args->begin(), args->end(),
-                      [alias](const arg &a) { return a.alias == alias; });
-    if (it != args->end())
-        throw std::invalid_argument("\nAlias" + alias + " is also used by " +
-                                    it->argName);
+    if (name == "--help" || alias == "-h") {
+        throw std::invalid_argument(
+            "\nError: '--help' argument and '-h' alias are reserved");
+    }
 
     arg newArg;
     newArg.argName = name;
@@ -214,10 +213,11 @@ inline void add(std::string name, std::string info,
 }
 
 /**
- * @brief Load CLI args into added variables
+ * @brief Parses the CLI arguments and loads the values into their registered
+ * variables
  *
- * @params argc Argument count given to int main()
- * @params argv Argument values given to int main()
+ * @params argc Argument count given to main()
+ * @params argv Argument value array given to main()
  */
 inline void parse(int argc, char **argv) {
     if (argc == 1) {
@@ -234,16 +234,16 @@ inline void parse(int argc, char **argv) {
 
     for (int i = 1; i < argc; i++) {
         std::string_view currentArg = argv[i];
-        if (currentArg == "--help" || currentArg == "-h") {
+        if (currentArg == "--help") {
             printHelp();
             exit(0);
         }
 
         for (size_t j = 0; j <= args->size(); j++) {
             if (j == (*args).size()) {
-                std::cout << "Error: Unrecognized parameter " << currentArg
-                          << std::endl;
-                printHelp(true);
+                std::cout << "Error: Unrecognized parameter '" << currentArg
+                          << "'. Try '" << *appCommand
+                          << " --help' for more information." << std::endl;
                 exit(1);
             }
             if (currentArg == (*args)[j].argName ||
@@ -258,8 +258,8 @@ inline void parse(int argc, char **argv) {
                     (*args)[j].updated = true;
                     break;
                 } else if (i == argc - 1) {
-                    std::cout << "Error: Value not specified for parameter "
-                              << currentArg << std::endl;
+                    std::cout << "Error: Value not specified for parameter '"
+                              << currentArg << "'." << std::endl;
                     exit(1);
                 }
 
@@ -272,8 +272,9 @@ inline void parse(int argc, char **argv) {
                     try {
                         *reference = std::stoi(argv[i + 1]);
                     } catch (std::invalid_argument) {
-                        std::cout << "Error: " << currentArg
-                                  << " takes an integer parameter" << std::endl;
+                        std::cout << "Error: '" << currentArg
+                                  << "' takes an integer parameter"
+                                  << std::endl;
                         exit(1);
                     }
                 } else if (std::holds_alternative<double *>(var)) {
@@ -281,8 +282,8 @@ inline void parse(int argc, char **argv) {
                     try {
                         *reference = std::stod(argv[i + 1]);
                     } catch (std::invalid_argument) {
-                        std::cout << "Error: " << currentArg
-                                  << " takes a double parameter" << std::endl;
+                        std::cout << "Error: '" << currentArg
+                                  << " 'takes a double parameter" << std::endl;
                         exit(1);
                     }
                 }
