@@ -84,9 +84,10 @@ inline void printHelp(bool usageOnly = false) {
                     std::string padding(longestCharCount + 5 -
                                             (arg.argName.size() + type.size()),
                                         ' ');
-                    std::cout << "    " << arg.alias << ", " << aliasPadding
-                              << arg.argName << " " << type << padding << " "
-                              << arg.argInfo
+                    std::cout << "    " << arg.alias
+                              << (arg.alias == " " ? "  " : ", ")
+                              << aliasPadding << arg.argName << " " << type
+                              << padding << " " << arg.argInfo
                               << (arg.required ? " (required)" : "") << "\n";
                 }
             }
@@ -102,8 +103,10 @@ inline void printHelp(bool usageOnly = false) {
                         longestAliasCount - arg.alias.size(), ' ');
                     std::string padding(
                         longestCharCount + 5 - arg.argName.size(), ' ');
-                    std::cout << "    " << arg.alias << ", " << aliasPadding
-                              << arg.argName << padding << "  " << arg.argInfo
+                    std::cout << "    " << arg.alias
+                              << (arg.alias == " " ? "  " : ", ")
+                              << aliasPadding << arg.argName << padding << "  "
+                              << arg.argInfo
                               << (arg.required ? " (required)" : "") << "\n";
                 }
             }
@@ -208,7 +211,10 @@ inline void add(std::string name, std::string info,
     newArg.reference = var;
     newArg.required = required;
     newArg.updated = false;
-    alias.empty() ? newArg.alias = getAlias() : newArg.alias = alias;
+    if (alias == "-")
+        newArg.alias = " ";
+    else
+        alias.empty() ? newArg.alias = getAlias() : newArg.alias = alias;
     (*args).push_back(newArg);
 }
 
