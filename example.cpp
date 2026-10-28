@@ -1,34 +1,21 @@
 #include "flags.hpp"
-#include <chrono>
-#include <iostream>
-#include <thread>
 
 int main(int argc, char **argv) {
 
-    flags::init("greet", "Greeting app v1.2",
-                "Introduce yourself and I will greet you!");
+    flags::init("greet", "Greeting App",
+                "Enter you name and I will greet you!");
 
-    std::string name = "default_name";
-    flags::add("-name", "This is where you give your name", &name);
+    std::string name;
+    bool working;
 
-    std::string work = "default_job";
-    flags::add("work", "This is where you enter what you do", &work);
-
-    int age{};
-    flags::add("--age", "This is where you give your age", &age);
-
-    bool willingToWork = false;
-    flags::add("--willingToWork",
-               "Entering this will flag you as willing to work", &willingToWork,
-               false, "-W");
+    flags::add("--name", "This is where you enter your name", &name, true);
+    flags::add("--working", "This denotes that you are working", &working);
 
     flags::parse(argc, argv);
 
-    // std::cout << "hi " << name << ", you are " << age
-    //           << " years old and your occupation is " << work << std::endl;
-
-    // std::cout << "You are " << (willingToWork ? "" : "not ")
-    //           << "willing to work" << std::endl;
+    std::cout << "Hi, " << name << std::endl;
+    if (working)
+        std::cout << "Good luck with your work" << std::endl;
 
     return 0;
 }

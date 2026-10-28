@@ -1,7 +1,10 @@
 #ifndef FLAGS_H
 #define FLAGS_H
 
+#include <algorithm>
+#include <cstddef>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 #include <variant>
 #include <vector>
@@ -44,56 +47,65 @@ inline void printHelp(bool usageOnly = false) {
             return "unknown type";
         };
 
+        bool options{}, flags{};
         // dynamic sizing of spaces by looking for longest command
-        int longestCharCount = 0;
+        size_t longestCharCount = 0;
         std::string_view type;
         for (const arg &arg : *args) {
             type = getType(arg);
+            if (!flags && type == "<bool>")
+                flags = true;
+            if (!options && type != "<bool>")
+                options = true;
             if (type == "<bool>" && arg.argName.size() > longestCharCount) {
                 longestCharCount = arg.argName.size();
-            } else if (arg.argName.size() + type.size() > longestCharCount)
+            } else if (arg.argName.size() + type.size() > longestCharCount) {
                 longestCharCount = arg.argName.size() + type.size();
-        }
-
-        // same as above but for aliases
-        int longestAliasCount = 0;
-        auto it =
-            std::max_element(args->begin(), args->end(),
-                             [longestAliasCount](const arg &a, const arg &b) {
-                                 return a.alias.size() > b.alias.size();
-                             });
-        if (it != args->end())
-            longestAliasCount = it->alias.size();
-
-        std::cout << "\nOptions:" << std::endl;
-
-        for (const arg &arg : *args) {
-            type = getType(arg);
-            if (type != "<bool>") {
-                std::string aliasPadding(longestAliasCount - arg.alias.size(),
-                                         ' ');
-                std::string padding(longestCharCount + 5 -
-                                        (arg.argName.size() + type.size()),
-                                    ' ');
-                std::cout << "    " << arg.alias << ", " << aliasPadding
-                          << arg.argName << " " << type << padding << " "
-                          << arg.argInfo << (arg.required ? " (required)" : "")
-                          << "\n";
             }
         }
 
-        std::cout << "\nFlags:" << std::endl;
+        // same as above but for aliases
+        size_t longestAliasCount = 0;
+        auto it = std::max_element(args->begin(), args->end(),
+                                   [](const arg &a, const arg &b) {
+                                       return a.alias.size() < b.alias.size();
+                                   });
+        if (it != args->end())
+            longestAliasCount = it->alias.size();
 
-        for (const arg &arg : *args) {
-            type = getType(arg);
-            if (type == "<bool>") {
-                std::string aliasPadding(longestAliasCount - arg.alias.size(),
-                                         ' ');
-                std::string padding(longestCharCount + 5 - arg.argName.size(),
-                                    ' ');
-                std::cout << "    " << arg.alias << ", " << aliasPadding
-                          << arg.argName << padding << "  " << arg.argInfo
-                          << (arg.required ? " (required)" : "") << "\n";
+        if (options) {
+            std::cout << "\nOptions:" << std::endl;
+
+            for (const arg &arg : *args) {
+                type = getType(arg);
+                if (type != "<bool>") {
+                    std::string aliasPadding(
+                        longestAliasCount - arg.alias.size(), ' ');
+                    std::string padding(longestCharCount + 5 -
+                                            (arg.argName.size() + type.size()),
+                                        ' ');
+                    std::cout << "    " << arg.alias << ", " << aliasPadding
+                              << arg.argName << " " << type << padding << " "
+                              << arg.argInfo
+                              << (arg.required ? " (required)" : "") << "\n";
+                }
+            }
+        }
+
+        if (flags) {
+            std::cout << "\nFlags:" << std::endl;
+
+            for (const arg &arg : *args) {
+                type = getType(arg);
+                if (type == "<bool>") {
+                    std::string aliasPadding(
+                        longestAliasCount - arg.alias.size(), ' ');
+                    std::string padding(
+                        longestCharCount + 5 - arg.argName.size(), ' ');
+                    std::cout << "    " << arg.alias << ", " << aliasPadding
+                              << arg.argName << padding << "  " << arg.argInfo
+                              << (arg.required ? " (required)" : "") << "\n";
+                }
             }
         }
 
@@ -116,7 +128,7 @@ inline void checkForRequired() {
 namespace flags {
 
 /**
- * @brief Initialized basic information about your application
+ * @brief Initializes basic information about your application for help output
  *
  * @param command The name of the binanry executable
  * @param name The name of your applciation
@@ -134,10 +146,10 @@ inline void init(std::string command, std::string name, std::string info) {
 * @brief Add a new argument to parse
 *
 * @param name Name of the arguement
-* @param info Information about the argument
-* @param var A reference of the variable where the parsed argument is to be
+* @param info A short description shown in help output
+* @param var A reference of the variable where the parsed value is to be
 stored
-* @param required If this arguement must be provided by the user
+* @param required If this arguement must be provided
 * @param alias A shorter name for the argument name
 *
 * @note required and alias are optional. alias will be autogenerated as -[first
@@ -150,13 +162,46 @@ inline void add(std::string name, std::string info,
     auto getAlias = [name]() {
         auto it = std::find_if(name.begin(), name.end(),
                                [](char c) { return c != '-'; });
+        if (it == name.end())
+            throw std::invalid_argument(
+                "\nName of a given argument has no characters in it");
         std::string alias = "-";
-        if (it != name.end())
-            return alias + *it;
-        throw std::invalid_argument(
-            "Name of a given argument has no characters in it");
-        // check for collisions with previous alias
+        alias += *it;
+        // check for collisions with previous aliases
+        for (const arg &arg : *args) {
+            while (arg.alias == alias) {
+                it++;
+                if (it == name.end()) {
+                    throw std::runtime_error(
+                        "\nCannot generate an alias for " + name +
+                        " due to conflict with " + arg.argName +
+                        ". Please specify another alias for " + name + " or " +
+                        arg.argName + ".");
+                    break;
+                }
+                alias += *it;
+            }
+        }
+        return alias;
     };
+
+    auto it = std::find_if(args->begin(), args->end(),
+                           [name](const arg &a) { return a.argName == name; });
+    if (it != args->end())
+        throw std::invalid_argument("\nArg name " + name +
+                                    " is being added more than once");
+
+    it = std::find_if(args->begin(), args->end(),
+                      [name](const arg &a) { return a.alias == name; });
+    if (it != args->end())
+        throw std::invalid_argument("\n" + name + " is already an alias for " +
+                                    it->argName);
+
+    it = std::find_if(args->begin(), args->end(),
+                      [alias](const arg &a) { return a.alias == alias; });
+    if (it != args->end())
+        throw std::invalid_argument("\nAlias" + alias + " is also used by " +
+                                    it->argName);
 
     arg newArg;
     newArg.argName = name;
@@ -177,10 +222,16 @@ inline void add(std::string name, std::string info,
 inline void parse(int argc, char **argv) {
     if (argc == 1) {
         std::cout
-            << "No parameter given. Please enter --help for more information"
+            << "No arguments given. Please enter --help for more information"
             << std::endl;
         exit(1);
     }
+
+    if (args->size() == 0) {
+        std::cout << "No arguments registered for this application";
+        exit(0);
+    }
+
     for (int i = 1; i < argc; i++) {
         std::string_view currentArg = argv[i];
         if (currentArg == "--help" || currentArg == "-h") {
@@ -188,11 +239,17 @@ inline void parse(int argc, char **argv) {
             exit(0);
         }
 
-        for (int j = 0; j < (*args).size(); j++) {
+        for (size_t j = 0; j <= args->size(); j++) {
+            if (j == (*args).size()) {
+                std::cout << "Error: Unrecognized parameter " << currentArg
+                          << std::endl;
+                printHelp(true);
+                exit(1);
+            }
             if (currentArg == (*args)[j].argName ||
                 currentArg == (*args)[j].alias) {
 
-                auto var = (*args)[j].reference;
+                const auto &var = (*args)[j].reference;
 
                 // handling flags
                 if (std::holds_alternative<bool *>(var)) {
@@ -232,11 +289,6 @@ inline void parse(int argc, char **argv) {
                 (*args)[j].updated = true;
                 i++;
                 break;
-            } else if (j == (*args).size()) {
-                std::cout << "Error: Unrecognized parameter " << currentArg
-                          << std::endl;
-                printHelp(true);
-                exit(1);
             }
         }
     }
